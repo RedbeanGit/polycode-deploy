@@ -1,0 +1,80 @@
+version: '3'
+
+services:
+  postgres:
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASS}
+      - POSTGRES_DB=${DB_NAME_PRODUCTION}
+    hostname: "${DB_HOST}"
+    image: postgres:14-alpine
+    restart: unless-stopped
+    user: root
+    volumes:
+      - ./db-data:/var/lib/postgresql/data
+
+  api:
+    depends_on:
+      - postgres
+    environment:
+      - JWT_SECRET
+      - NODE_ENV
+      - DB_HOST
+      - DB_PORT
+      - DB_USER
+      - DB_PASS
+      - DB_NAME_PRODUCTION
+      - DB_DIALECT
+      - VERIFICATION_CODE_EXPIRATION
+      - BEARER
+      - DOCKER_SOCKET_PATH
+      - MAILER_HOST
+      - MAILER_PORT
+      - MAILER_USER
+      - MAILER_PASS
+      - APP_URL
+    image: "redbeandock/polycode-backend:${API_VERSION}"
+    restart: unless-stopped
+    volumes:
+      - ${DOCKER_SOCKET_PATH}:${DOCKER_SOCKET_PATH}
+
+  app:
+    depends_on:
+      - api
+    environment:
+      - NODE_ENV
+      - REACT_APP_STOWDO_VERSION
+      - REACT_APP_STOWDO_API_HOST
+      - REACT_APP_STOWDO_API_PORT
+      - REACT_APP_STOWDO_API_PROTOCOL
+    image: "redbeandock/polycode-frontend:${APP_VERSION}"
+    restart: unless-stopped
+
+  api_lb:
+    image: nginx:latest
+    volumes:
+      - ./nginx-config/api-lb/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx-config/api-lb/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  app_lb:
+    image: nginx:latest
+    volumes:
+      - ./nginx-config/app-lb/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx-config/app-lb/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  proxy:
+    image: 'jc21/nginx-proxy-manager:latest'
+    ports:
+      - '80:80'
+      - '81:81'
+      - '443:443'
+    restart: unless-stopped
+    volumes:
+      - ./proxy-data:/data
+      - ./letsencrypt:/etc/letsencrypt
